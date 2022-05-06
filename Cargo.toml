@@ -9,7 +9,7 @@ edition = "2021"
 bson = "2.1.0"
 chrono = "0.4"
 gtfs-structures = "0.29.0"
-mongodb = { git = "https://github.com/mongodb/mongo-rust-driver", branch = "master", default-features = false, features = ["sync"] }
+mongodb = { version = "2.2.1", default-features = false, features = ["sync"] }
 #rayon = "1.5"
 serde = { version = "1.0", features = ["derive"] }
 structmap = { git = "https://github.com/ex0dus-0x/structmap", branch = "master" }

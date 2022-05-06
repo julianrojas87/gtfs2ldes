@@ -9,7 +9,8 @@ use structmap_derive::ToMap;
 use typed_builder::TypedBuilder;
 use bson::DateTime;
 
-/// A subset copy of the gtfs_structures::Stop struct, duplicated here to apply the structmap derive macro
+/// An intermediary struct that is a subset copy of the gtfs_structures::Stop struct.
+/// It is defined for being able to apply the structmap::ToMap derive macro
 #[derive(Clone, Default, ToMap)]
 pub struct Stop2 {
     pub id: String,
@@ -79,7 +80,8 @@ impl VersionedStop {
     ) -> VersionedStop {
         // Build Stop instance that we can introspect
         let stop2 = Stop2::from_stop(stop);
-        // Convert Stop2 struct to BTreeMap of field names and values we can use for URI building
+        // Convert Stop2 struct to BTreeMap of field names and values (via derived structmap macro) 
+        // that we can use for URI building
         let btreemap: BTreeMap<String, String> = Stop2::to_stringmap(stop2.clone());
         // Transform BTreeMap to HashMap as required by URI template library
         let mut params: HashMap<&str, &str> = utils::btreemap_to_hashmap(&btreemap);

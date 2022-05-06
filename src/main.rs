@@ -3,11 +3,13 @@ mod lib;
 
 use bson::DateTime;
 use entities::stop::VersionedStop;
-use gtfs_structures::{Gtfs/*, Trip*/};
-//use lib::generator;
+use gtfs_structures::{Gtfs, Stop/*, Trip*/};
+use lib::generators::versioned_stop::*;
+use lib::*;
 use std::error::Error;
 //use std::time::Instant;
 //use rayon::prelude::*;
+use std::sync::Arc;
 
 fn main() {
     if let Err(err) = run() {
@@ -16,48 +18,49 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    println!("Reading GTFS source...");
+    println!("INFO: Reading GTFS source...");
     let feed = Gtfs::new("/home/julian/Desktop/nmbs.gtfs.zip")?;
     feed.print_stats();
+
+    // Connect to MongoDB and create main DB
+    let mongo_client = db::init_db("mongodb://localhost:27017");
+    let database = mongo_client.database("ldes_db");
+    println!("INFO: We have a handle for {} MongoDB!", database.name());
+    // Create TimeSeries (TS) collection for stops and get a handle for it
+    let stops_coll = db::create_timeseries::<VersionedStop>(&database, "ts_stops_coll");
+    println!(
+        "INFO: We have a handle for {} timeseries collection!",
+        stops_coll.name()
+    );
+    // Timestamp to use as generation time
+    let now = DateTime::now();
+
+    // Produce collection of versioned stops
+    let stops_vec: Vec<&Arc<Stop>> = feed.stops.values().collect();
+    let stops_gen = VersionedStopGenerator::new(
+        stops_vec,
+        String::from("http://irail.be/stations/NMBS/00{id}#{generatedAtTime}"),
+        String::from("http://irail.be/stations/NMBS/00{id}"),
+        String::from("http://irail.be/stations/NMBS/{parent_station}"),
+        now,
+    );
+
+    // Insert versioned stops in MongoDB TS Collection
+    match stops_coll.insert_many(stops_gen, None) {
+        Ok(result) => println!("INFO: Inserted correctly {} new records in MongoDB", result.inserted_ids.len()),
+        Err(error) => println!("ERROR: Something went wrong inserting versioned stops into MongoDB: {}", error)
+    }
+    
+    // Produce collection of connections
     /*let base_uri = String::from("http://irail.be/");
-    let trips: Vec<Trip> = feed.trips.into_iter().map(|(_id, trip)| trip).collect();
-    let conn_gen = generator::ConnectionGenerator::new(
-        trips,
+    let trips_vec: Vec<Trip> = feed.trips.into_iter().map(|(_id, trip)| trip).collect();
+    let conn_gen = generators::connection::ConnectionGenerator::new(
+        trips_vec,
         feed.calendar,
         feed.calendar_dates,
         feed.routes,
         base_uri,
-    );*/
-
-    // Connect to MongoDB and create main DB
-    let mongo_client = lib::db::init_db("mongodb://localhost:27017");
-    let database = mongo_client.database("ldes_db");
-    println!("We have a handle for {} MongoDB!", database.name());
-
-    // Produce collection of versioned stops
-    let now = DateTime::now();
-
-    for stop_tuple in feed.stops {
-        let vstop = VersionedStop::from_stop(
-            &*stop_tuple.1,
-            String::from("http://irail.be/stations/NMBS/00{id}#{generatedAtTime}"),
-            String::from("http://irail.be/stations/NMBS/00{id}"),
-            String::from("http://irail.be/stations/NMBS/{parent_station}"),
-            now,
-        );
-        println!("***************************************");
-        println!(
-            "@id: {},\nname: {},\nisVersionOf: {},\nparentStation: {},\nlat: {},\nlong: {}",
-            vstop.id,
-            vstop.name,
-            vstop.isVersionOf,
-            vstop.parent_station.unwrap_or("No parent".to_string()),
-            vstop.latitude,
-            vstop.longitude
-        )
-    }
-    // Create LDES for Stops
-    /*let stops_ldes =
+    );
 
     let mut conn_count = 0usize;
     let t0 = Instant::now();
